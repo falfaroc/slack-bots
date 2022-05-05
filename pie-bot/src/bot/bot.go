@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"pie-bot/pie-bot/src/util"
 	"strings"
 	"time"
 
@@ -25,7 +26,7 @@ func calculateDate(date time.Time) time.Time {
 	return date
 }
 
-func updateState(ctx *PieContent) {
+func updateState(ctx *util.PieContent) {
 	if len(ctx.Members) == 0 {
 		return
 	}
@@ -77,7 +78,7 @@ func updateState(ctx *PieContent) {
 	fmt.Println(ctx.State.Previous)
 }
 
-func handleAddCommand(id string, name string, command []string, pies *PieContent) (error, string) {
+func handleAddCommand(id string, name string, command []string, pies *util.PieContent) (error, string) {
 	if len(command) < 3 {
 		return errors.New("Add command found with invalid length."), ""
 	}
@@ -94,20 +95,20 @@ func handleAddCommand(id string, name string, command []string, pies *PieContent
 	pieType := strings.TrimSuffix(strings.Join(command[2:], " "), "\n")
 	member := pies.Members[0]
 
-	pies.Pies = append(pies.Pies, Pie{Type: pieType, Date: date.Format("2006-02-01"), Member: member})
+	pies.Pies = append(pies.Pies, util.Pie{Type: pieType, Date: date.Format("2006-02-01"), Member: member})
 	pies.Members = append(pies.Members, member)
 	pies.Members = pies.Members[1:]
 
 	updateState(pies)
 
-	savePersistentDate(pies)
+	util.SavePersistentDate(pies)
 
 	response := "What a great " + pieType + " by " + name
 
 	return nil, response
 }
 
-func handleJoinCommand(user *slack.User, command []string, pies *PieContent) error {
+func handleJoinCommand(user *slack.User, command []string, pies *util.PieContent) error {
 	if len(command) < 2 {
 		return errors.New("Join command found with invalid length.")
 	}
@@ -118,18 +119,18 @@ func handleJoinCommand(user *slack.User, command []string, pies *PieContent) err
 		}
 	}
 
-	pies.Members = append(pies.Members, Member{ID: user.ID, Name: user.RealName})
+	pies.Members = append(pies.Members, util.Member{ID: user.ID, Name: user.RealName})
 
 	fmt.Println(len(pies.Members))
 
 	updateState(pies)
 
-	savePersistentDate(pies)
+	util.SavePersistentDate(pies)
 
 	return nil
 }
 
-func handleNextCommand(pies *PieContent) string {
+func handleNextCommand(pies *util.PieContent) string {
 	if pies.State.Next.ID == "" {
 		return "I have no friends. Someone please join the club."
 	}
@@ -146,7 +147,7 @@ func handleNextCommand(pies *PieContent) string {
 	return name + " is scheduled for " + pies.State.Next.Date
 }
 
-func handleCurrentCommand(pies *PieContent) string {
+func handleCurrentCommand(pies *util.PieContent) string {
 	if pies.State.Current.ID == "" {
 		return "I have no friends. Someone please join the club."
 	}
@@ -163,7 +164,7 @@ func handleCurrentCommand(pies *PieContent) string {
 	return name + " is scheduled for " + pies.State.Current.Date
 }
 
-func handlePreviousCommand(pies *PieContent) string {
+func handlePreviousCommand(pies *util.PieContent) string {
 	if pies.State.Previous.ID == "" {
 		return "No one has made a pies. DISAPPOINTED!"
 	}
@@ -180,7 +181,7 @@ func handlePreviousCommand(pies *PieContent) string {
 	return "The last pie was made one " + pies.State.Previous.Date + " by " + name
 }
 
-func handleHistoryCommand(pies *PieContent) string {
+func handleHistoryCommand(pies *util.PieContent) string {
 	response := fmt.Sprintf("====================One history coming up!====================\n")
 	// fmt.Printf("%30s One history coming up! %30s\n", "", "")
 	fmt.Printf("%s\n", strings.Repeat("=", 75))
@@ -192,7 +193,7 @@ func handleHistoryCommand(pies *PieContent) string {
 	return response
 }
 
-func handleCommand(user *slack.User, command []string, pies *PieContent) (slack.Attachment, error) {
+func handleCommand(user *slack.User, command []string, pies *util.PieContent) (slack.Attachment, error) {
 	attachment := slack.Attachment{}
 
 	if command[1] == "add" {
@@ -235,7 +236,7 @@ func handleCommand(user *slack.User, command []string, pies *PieContent) (slack.
 	return attachment, nil
 }
 
-func handleAppMentionEvent(event *slackevents.AppMentionEvent, client *slack.Client, pies *PieContent) error {
+func handleAppMentionEvent(event *slackevents.AppMentionEvent, client *slack.Client, pies *util.PieContent) error {
 	user, err := client.GetUserInfo(event.User)
 	if err != nil {
 		return err
@@ -262,7 +263,7 @@ func handleAppMentionEvent(event *slackevents.AppMentionEvent, client *slack.Cli
 	return nil
 }
 
-func handleEventMessage(event slackevents.EventsAPIEvent, client *slack.Client, pies *PieContent) error {
+func handleEventMessage(event slackevents.EventsAPIEvent, client *slack.Client, pies *util.PieContent) error {
 	switch event.Type {
 	case slackevents.CallbackEvent:
 
@@ -282,14 +283,19 @@ func handleEventMessage(event slackevents.EventsAPIEvent, client *slack.Client, 
 	return nil
 }
 
-func main() {
-	godotenv.Load(".env")
+func Execute() {
+	err := godotenv.Load("secret/.env")
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 
-	pies := loadPersistentData(PersistentFile)
+	pies := util.LoadPersistentData(util.PersistentFile)
 	updateState(&pies)
 
 	token := os.Getenv("SLACK_AUTH_TOKEN")
 	appToken := os.Getenv("SLACK_APP_TOKEN")
+
+	fmt.Println(token + " " + appToken)
 
 	client := slack.New(token, slack.OptionDebug(true), slack.OptionAppLevelToken(appToken))
 	socketClient := socketmode.New(
