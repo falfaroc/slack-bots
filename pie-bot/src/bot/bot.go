@@ -16,6 +16,8 @@ import (
 	"github.com/slack-go/slack/socketmode"
 )
 
+const dateFormat = "2006-01-02"
+
 func calculateDate(date time.Time) time.Time {
 	date = date.AddDate(0, 0, 1)
 
@@ -34,12 +36,12 @@ func updateState(ctx *util.PieContent) {
 	if len(ctx.Members) == 1 {
 		fmt.Println("Get more friends to make pies for you.")
 		date := calculateDate(time.Now())
-		next_week := date.AddDate(0, 0, 7)
+		next_week := date.AddDate(0, 0, 14)
 
-		ctx.State.Current.Date = date.Format("2006-02-01")
+		ctx.State.Current.Date = date.Format(dateFormat)
 		ctx.State.Current.ID = ctx.Members[0].ID
 
-		ctx.State.Next.Date = next_week.Format("2006-02-01")
+		ctx.State.Next.Date = next_week.Format(dateFormat)
 		ctx.State.Next.ID = ctx.Members[0].ID
 
 		if len(ctx.Pies) != 0 {
@@ -49,20 +51,16 @@ func updateState(ctx *util.PieContent) {
 			ctx.State.Previous.ID = lastPie.Member.ID
 		}
 
-		fmt.Println(ctx.State.Current)
-		fmt.Println(ctx.State.Next)
-		fmt.Println(ctx.State.Previous)
-
 		return
 	}
 
 	date := calculateDate(time.Now())
-	next_week := date.AddDate(0, 0, 7)
+	next_week := date.AddDate(0, 0, 14)
 
-	ctx.State.Current.Date = date.Format("2006-02-01")
+	ctx.State.Current.Date = date.Format(dateFormat)
 	ctx.State.Current.ID = ctx.Members[0].ID
 
-	ctx.State.Next.Date = next_week.Format("2006-02-01")
+	ctx.State.Next.Date = next_week.Format(dateFormat)
 	ctx.State.Next.ID = ctx.Members[1].ID
 
 	if len(ctx.Pies) != 0 {
@@ -71,11 +69,6 @@ func updateState(ctx *util.PieContent) {
 		ctx.State.Previous.Date = lastPie.Date
 		ctx.State.Previous.ID = lastPie.Member.ID
 	}
-
-	fmt.Println("Let's See!")
-	fmt.Println(ctx.State.Current)
-	fmt.Println(ctx.State.Next)
-	fmt.Println(ctx.State.Previous)
 }
 
 func handleAddCommand(id string, name string, command []string, pies *util.PieContent) (error, string) {
@@ -91,11 +84,15 @@ func handleAddCommand(id string, name string, command []string, pies *util.PieCo
 		return errors.New("You are not next DAN!"), ""
 	}
 
-	date := time.Now()
+	date := time.Now().Format(dateFormat)
+	if date != pies.State.Current.Date {
+		return errors.New("Today is not pie day!\n Next Pie Day is, " + pies.State.Current.Date), ""
+	}
+
 	pieType := strings.TrimSuffix(strings.Join(command[2:], " "), "\n")
 	member := pies.Members[0]
 
-	pies.Pies = append(pies.Pies, util.Pie{Type: pieType, Date: date.Format("2006-02-01"), Member: member})
+	pies.Pies = append(pies.Pies, util.Pie{Type: pieType, Date: date, Member: member})
 	pies.Members = append(pies.Members, member)
 	pies.Members = pies.Members[1:]
 
@@ -120,8 +117,6 @@ func handleJoinCommand(user *slack.User, command []string, pies *util.PieContent
 	}
 
 	pies.Members = append(pies.Members, util.Member{ID: user.ID, Name: user.RealName})
-
-	fmt.Println(len(pies.Members))
 
 	updateState(pies)
 
@@ -215,7 +210,7 @@ func handleCommand(user *slack.User, command []string, pies *util.PieContent) (s
 			return attachment, err
 
 		} else {
-			attachment.Text = "New Challenger Approaches:" + user.RealName
+			attachment.Text = "New Challenger Approaches: " + user.RealName
 			return attachment, nil
 		}
 	} else if command[1] == "next" {
@@ -290,12 +285,10 @@ func Execute() {
 	}
 
 	pies := util.LoadPersistentData(util.PersistentFile)
-	updateState(&pies)
+	// updateState(&pies)
 
 	token := os.Getenv("SLACK_AUTH_TOKEN")
 	appToken := os.Getenv("SLACK_APP_TOKEN")
-
-	fmt.Println(token + " " + appToken)
 
 	client := slack.New(token, slack.OptionDebug(true), slack.OptionAppLevelToken(appToken))
 	socketClient := socketmode.New(
